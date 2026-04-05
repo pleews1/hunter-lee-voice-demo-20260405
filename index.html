@@ -90,15 +90,19 @@
         const thankYou = document.getElementById('thankYou');
 
         startBtn.addEventListener('click', async () => {
-            // UI Transition
-            hero.classList.add('opacity-0', 'scale-95');
-            setTimeout(() => {
-                hero.classList.add('hidden');
-                callUi.classList.remove('hidden');
-                setTimeout(() => {
-                    callUi.classList.remove('opacity-0', 'scale-95');
-                }, 50);
-            }, 500);
+    // 1. Ask the "Middleman" for the key
+    const response = await fetch('/api/speech');
+    const data = await response.json();
+    const SECRET_KEY = data.apiKey;
+
+    // 2. Now that we have the key, start the Voice
+    if (SECRET_KEY) {
+        console.log("Sophia is connecting...");
+        // This is where Sophia's voice kicks in!
+    } else {
+        alert("Wait! You forgot to add the API Key in Vercel settings.");
+    }
+});
 
             // Here you would initialize the Gemini Web SDK
             // setupGeminiLive(CONFIG);
