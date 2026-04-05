@@ -16,54 +16,83 @@
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center justify-center p-6">
+<body class="min-h-screen flex flex-col items-center justify-center p-6 text-center">
 
-    <div id="hero" class="text-center max-w-2xl transition-all duration-700">
+    <div id="hero" class="max-w-2xl transition-all duration-700">
         <h1 class="text-5xl font-bold mb-6 bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
             Talk to Sophia – Book Your Strategy Call
         </h1>
-        <button id="startBtn" class="bg-sky-500 hover:bg-sky-400 text-white font-semibold py-4 px-10 rounded-full text-xl transition-all flex items-center gap-3 mx-auto">
+        <p class="text-slate-400 mb-8">Click below to start a real-time conversation with our AI assistant.</p>
+        <button id="startBtn" class="bg-sky-500 hover:bg-sky-400 text-white font-semibold py-4 px-10 rounded-full text-xl transition-all shadow-lg shadow-sky-500/20">
             Speak to Sophia
         </button>
     </div>
 
-    <div id="callUi" class="hidden glass p-10 rounded-3xl w-full max-w-md text-center">
+    <div id="callUi" class="hidden glass p-10 rounded-3xl w-full max-w-md">
         <div class="w-24 h-24 bg-sky-500 rounded-full mx-auto mb-8 pulse"></div>
         <h2 class="text-2xl font-semibold mb-2">Sophia is Listening</h2>
-        <p id="statusText" class="text-slate-400 italic">Connecting to secure server...</p>
+        <p id="statusText" class="text-slate-400 italic">Initializing secure connection...</p>
+        <button onclick="location.reload()" class="mt-8 text-rose-400 text-sm uppercase tracking-widest font-bold">End Call</button>
     </div>
 
-    <script>
+    <script type="module">
+        import { MultimodalLiveClient } from 'https://esm.run/@google/generative-ai';
+
         const startBtn = document.getElementById('startBtn');
         const hero = document.getElementById('hero');
         const callUi = document.getElementById('callUi');
         const statusText = document.getElementById('statusText');
 
         startBtn.addEventListener('click', async () => {
-            // 1. Show the Loading UI
             hero.classList.add('hidden');
             callUi.classList.remove('hidden');
 
             try {
-                // 2. FETCH THE KEY SECURELY
-                statusText.innerText = "Authorizing microphone...";
-                const response = await fetch('/api/speech');
-                const data = await response.json();
+                // 1. Fetch Key from your Vercel /api/speech.js
+                statusText.innerText = "Fetching secure token...";
+                const res = await fetch('/api/speech');
+                const { apiKey } = await res.json();
                 
-                if (!data.apiKey) {
-                    throw new Error("API Key not found in Vercel settings.");
-                }
+                if (!apiKey) throw new Error("API Key missing in Vercel settings.");
 
-                // 3. START THE VOICE (Placeholder for SDK logic)
-                statusText.innerText = "Connected! Sophia is ready.";
-                console.log("Success! Key retrieved securely.");
+                // 2. Initialize Sophia
+                const client = new MultimodalLiveClient({ apiKey });
+                const config = {
+                    model: "models/gemini-2.0-flash-exp",
+                    systemInstruction: { parts: [{ text: "You are Sophia, a warm, professional Australian female from Hunter Lee Voice AI Agency. Your goal is to book a strategy call. Be helpful, concise, and never mention you are an AI. First greeting: 'Hello, this is Sophia from Hunter Lee Voice AI Agency. I'd love to help you book a strategy call with Hunter. May I have your name please?' Collect: Name, Company, Phone, Email. Offer 30min or 60min slots Mon-Fri 9am-5pm Sydney time." }] },
+                    generationConfig: { speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoide" } } } }
+                };
+
+                // 3. Connect Microphone & Start
+                await client.connect(config);
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 
-                // In a real demo, you'd now initialize: 
-                // new MultimodalLiveClient({ apiKey: data.apiKey });
+                // Process incoming audio from Sophia
+                client.on('audio', (data) => {
+                    const blob = new Blob([data.buffer], { type: 'audio/pcm' });
+                    const url = URL.createObjectURL(blob);
+                    const audio = new Audio(url);
+                    audio.play();
+                });
+
+                statusText.innerText = "Connected. Speak now.";
+                
+                // This sends your voice to the AI
+                const audioContext = new AudioContext({ sampleRate: 16000 });
+                const source = audioContext.createMediaStreamSource(stream);
+                const processor = audioContext.createScriptProcessor(4096, 1, 1);
+                
+                processor.onaudioprocess = (e) => {
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    client.sendRealtimeInput([{ mimeType: "audio/pcm;rate=16000", data: inputData }]);
+                };
+                
+                source.connect(processor);
+                processor.connect(audioContext.destination);
 
             } catch (err) {
                 statusText.innerText = "Error: " + err.message;
-                statusText.classList.add('text-rose-400');
+                console.error(err);
             }
         });
     </script>
